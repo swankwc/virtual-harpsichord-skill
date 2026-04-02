@@ -18,4 +18,4 @@ A playable virtual harpsichord keyboard for Google AI Edge Gallery.
 
 ## Instructions
 
-Call the `run_js` tool.
+Call the `run_js` tool. 
