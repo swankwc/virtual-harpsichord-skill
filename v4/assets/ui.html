@@ -1,0 +1,315 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Harpsichord V4</title>
+<style>
+body{margin:0;background:#1b110c;color:#f6efe6;font-family:system-ui}
+.wrap{padding:12px;max-width:1100px;margin:auto}
+.title{text-align:center;font-size:1.45rem;font-weight:700}
+.sub,.status,.legend{text-align:center;color:#d8c1a1;margin:6px 0}
+.panel{background:#342015;border:1px solid #6d4727;border-radius:12px;padding:10px;margin:10px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.lab{font-size:.78rem;color:#d8c1a1;margin-bottom:4px;display:block}
+button,select{width:100%;padding:9px;border-radius:9px;border:1px solid #6e4a27;background:#3b2417;color:#f6efe6}
+.active{outline:2px solid #b88a3b}
+.case{overflow:hidden;padding:12px;background:linear-gradient(#6a3f21,#321d12);border-top:6px solid #b88a3b;border-bottom:6px solid #b88a3b;border-radius:18px}
+.manuals{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.manual{padding:8px;border:1px solid #7b5b38;border-radius:10px;text-align:center;color:#d8c1a1}
+.manual.on{background:#5a3c22;color:#fff}
+.shell{overflow-x:auto}
+.keys{position:relative;display:flex;width:max-content;user-select:none;touch-action:pan-x}
+.wk{position:relative;width:42px;height:170px;background:linear-gradient(#fffaf2,#e8dcc9);border:1px solid #a68a68;border-bottom:9px solid #b59461;border-radius:0 0 9px 9px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;color:#51361d;font-size:.67rem}
+.wk.down{background:linear-gradient(#f5deb4,#dfc18d);transform:translateY(2px)}
+.bk{position:absolute;width:24px;height:98px;background:linear-gradient(#4f4035,#1f1714);border:1px solid #130d0b;border-radius:0 0 8px 8px;z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;color:#f0e4d3;font-size:.58rem}
+.bk.down{background:linear-gradient(#8b6a43,#3a281d);transform:translateY(2px)}
+.nolabels .wk,.nolabels .bk{color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title">Virtual Harpsichord V4</div>
+  <div class="sub">Style presets, coupler, room, temperament, and performance controls</div>
+
+  <div class="panel">
+    <div class="grid">
+      <div>
+        <span class="lab">Audio</span>
+        <button id="audioBtn">Enable Audio</button>
+      </div>
+      <div>
+        <span class="lab">Style</span>
+        <select id="style">
+          <option value="french">French</option>
+          <option value="flemish">Flemish</option>
+          <option value="italian">Italian</option>
+          <option value="english">English</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Registration</span>
+        <select id="reg">
+          <option value="s8">Single 8'</option>
+          <option value="d8">Double 8'</option>
+          <option value="e4">8' + 4'</option>
+          <option value="lt">Lute</option>
+          <option value="fc">Full</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Temperament</span>
+        <select id="temper">
+          <option value="eq">Equal</option>
+          <option value="mt">Meantone</option>
+          <option value="vl">Vallotti</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Room</span>
+        <select id="room">
+          <option value="dry">Dry</option>
+          <option value="ch">Chamber</option>
+          <option value="hl">Hall</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Manual</span>
+        <div class="row2">
+          <button id="lowerBtn" class="active">Lower</button>
+          <button id="upperBtn">Upper</button>
+        </div>
+      </div>
+      <div>
+        <span class="lab">Coupler</span>
+        <div class="row2">
+          <button id="couplerOff" class="active">Off</button>
+          <button id="couplerOn">On</button>
+        </div>
+      </div>
+      <div>
+        <span class="lab">Octave</span>
+        <div class="row3">
+          <button id="octDown">-1</button>
+          <button id="octZero" class="active">0</button>
+          <button id="octUp">+1</button>
+        </div>
+      </div>
+      <div>
+        <span class="lab">Utility</span>
+        <div class="row2">
+          <button id="labelsBtn">Labels</button>
+          <button id="demoBtn">Demo</button>
+        </div>
+      </div>
+    </div>
+    <div class="status" id="status">Keyboard: A W S E D F T G Y H U J K O L P ;</div>
+  </div>
+
+  <div class="case">
+    <div class="manuals">
+      <div id="m1" class="manual on">Lower manual</div>
+      <div id="m2" class="manual">Upper manual</div>
+    </div>
+    <div class="shell">
+      <div id="keys" class="keys"></div>
+    </div>
+  </div>
+
+  <div class="legend">French + Full + Hall is the biggest sound. Italian + Single 8' + Dry is the sharpest.</div>
+</div>
+
+<script>
+const WHITE=['C','D','E','F','G','A','B'];
+const BLACK_AFTER={C:'C#',D:'D#',F:'F#',G:'G#',A:'A#'};
+const SEMI={C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+const KEYMAP={a:'C4',w:'C#4',s:'D4',e:'D#4',d:'E4',f:'F4',t:'F#4',g:'G4',y:'G#4',h:'A4',u:'A#4',j:'B4',k:'C5',o:'C#5',l:'D5',p:'D#5',';':'E5'};
+const TEMPER={
+  eq:{C:0,'C#':0,D:0,'D#':0,E:0,F:0,'F#':0,G:0,'G#':0,A:0,'A#':0,B:0},
+  mt:{C:0,'C#':-16,D:-4,'D#':-20,E:-8,F:4,'F#':-12,G:-2,'G#':-18,A:-6,'A#':-22,B:-10},
+  vl:{C:0,'C#':-4,D:-2,'D#':-6,E:-1,F:1,'F#':-3,G:0,'G#':-5,A:-2,'A#':-6,B:-1}
+};
+const STYLE={
+  french:{cut:3400,dec:1.15,det:6,burst:3000,four:.06},
+  flemish:{cut:3200,dec:1.03,det:5,burst:2800,four:.05},
+  italian:{cut:5000,dec:.78,det:3,burst:4300,four:.04},
+  english:{cut:3800,dec:1.18,det:7,burst:3200,four:.07}
+};
+const ROOM={dry:1,ch:1.1,hl:1.25};
+
+let ctx=null;
+let shift=0;
+let manual='lower';
+let coupler=false;
+let showLabels=true;
+let demoTimer=null;
+
+const keysEl=document.getElementById('keys');
+const statusEl=document.getElementById('status');
+const styleEl=document.getElementById('style');
+const regEl=document.getElementById('reg');
+const temperEl=document.getElementById('temper');
+const roomEl=document.getElementById('room');
+const m1=document.getElementById('m1');
+const m2=document.getElementById('m2');
+
+async function ensureAudio(){
+  if(!ctx) ctx=new (window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state!=='running') await ctx.resume();
+  document.getElementById('audioBtn').textContent='Audio Enabled';
+}
+document.getElementById('audioBtn').onclick=ensureAudio;
+
+function parseNote(note){
+  const m=note.match(/^([A-G]#?)(\d)$/);
+  return {name:m[1],oct:Number(m[2])};
+}
+function freq(note){
+  const {name,oct}=parseNote(note);
+  const o=oct+shift;
+  const midi=12*(o+1)+SEMI[name];
+  const base=440*Math.pow(2,(midi-69)/12);
+  const cents=TEMPER[temperEl.value][name]||0;
+  return base*Math.pow(2,cents/1200);
+}
+function voice(f,opt={}){
+  const s=STYLE[styleEl.value];
+  const r=ROOM[roomEl.value];
+  const now=ctx.currentTime;
+  const osc=ctx.createOscillator();
+  const filter=ctx.createBiquadFilter();
+  const gain=ctx.createGain();
+  osc.type=opt.type||'sawtooth';
+  osc.frequency.value=f;
+  osc.detune.value=opt.detune||0;
+  filter.type='lowpass';
+  filter.frequency.value=opt.cut||s.cut;
+  gain.gain.setValueAtTime(0.0001,now);
+  gain.gain.exponentialRampToValueAtTime(opt.gain||0.12,now+0.004);
+  gain.gain.exponentialRampToValueAtTime(0.0001,now+(opt.dec||s.dec)*r);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now+(opt.dec||s.dec)*r+0.05);
+}
+function pluck(f){
+  const s=STYLE[styleEl.value];
+  switch(regEl.value){
+    case 's8':
+      voice(f,{gain:0.12});
+      break;
+    case 'd8':
+      voice(f,{gain:0.12});
+      voice(f,{gain:0.08,detune:s.det,cut:s.cut-200,dec:s.dec*0.85});
+      break;
+    case 'e4':
+      voice(f,{gain:0.11});
+      voice(f*2,{gain:s.four,cut:s.cut+1000,dec:s.dec*0.55,type:'triangle'});
+      break;
+    case 'lt':
+      voice(f,{gain:0.10,cut:1700,dec:0.60,type:'triangle'});
+      break;
+    case 'fc':
+      voice(f,{gain:0.12});
+      voice(f,{gain:0.08,detune:s.det,cut:s.cut,dec:s.dec*0.85});
+      voice(f*2,{gain:s.four+0.01,cut:s.cut+1100,dec:s.dec*0.5,type:'triangle'});
+      break;
+  }
+}
+async function play(note){
+  await ensureAudio();
+  const f=freq(note);
+  pluck(f);
+  if(coupler) pluck(f*1.002);
+}
+function setManual(m){
+  manual=m;
+  document.getElementById('lowerBtn').classList.toggle('active',m==='lower');
+  document.getElementById('upperBtn').classList.toggle('active',m==='upper');
+  m1.classList.toggle('on',m==='lower');
+  m2.classList.toggle('on',m==='upper');
+  refreshStatus();
+}
+function setCoupler(v){
+  coupler=v;
+  document.getElementById('couplerOff').classList.toggle('active',!v);
+  document.getElementById('couplerOn').classList.toggle('active',v);
+  refreshStatus();
+}
+function setShift(v){
+  shift=v;
+  document.getElementById('octDown').classList.toggle('active',v===-1);
+  document.getElementById('octZero').classList.toggle('active',v===0);
+  document.getElementById('octUp').classList.toggle('active',v===1);
+  refreshStatus();
+}
+function refreshStatus(){
+  statusEl.textContent=`${styleEl.value} | ${regEl.value} | ${temperEl.value} | ${roomEl.value} | octave ${shift>0?'+':''}${shift} | ${manual}${coupler?' + coupler':''}`;
+}
+document.getElementById('lowerBtn').onclick=()=>setManual('lower');
+document.getElementById('upperBtn').onclick=()=>setManual('upper');
+document.getElementById('couplerOff').onclick=()=>setCoupler(false);
+document.getElementById('couplerOn').onclick=()=>setCoupler(true);
+document.getElementById('octDown').onclick=()=>setShift(-1);
+document.getElementById('octZero').onclick=()=>setShift(0);
+document.getElementById('octUp').onclick=()=>setShift(1);
+[styleEl,regEl,temperEl,roomEl].forEach(el=>el.onchange=refreshStatus);
+
+document.getElementById('labelsBtn').onclick=()=>{
+  showLabels=!showLabels;
+  keysEl.classList.toggle('nolabels',!showLabels);
+};
+document.getElementById('demoBtn').onclick=()=>{
+  if(demoTimer){ clearInterval(demoTimer); demoTimer=null; return; }
+  const seq=['C4','E4','G4','C5','B4','G4','E4','C4'];
+  let i=0;
+  demoTimer=setInterval(()=>play(seq[i++%seq.length]),260);
+};
+
+function makeKey(note,isBlack,left=0){
+  const el=document.createElement('div');
+  el.className=isBlack?'bk':'wk';
+  el.textContent=note;
+  if(isBlack) el.style.left=`${left}px`;
+  const down=async e=>{
+    e.preventDefault();
+    el.classList.add('down');
+    try{ await play(note); }catch(err){ console.error(err); }
+  };
+  const up=()=>el.classList.remove('down');
+  el.addEventListener('pointerdown',down);
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
+  el.addEventListener('pointerleave',up);
+  return el;
+}
+function build(){
+  let wi=0;
+  for(let o=3;o<=6;o++){
+    for(const l of WHITE){
+      const wn=`${l}${o}`;
+      keysEl.appendChild(makeKey(wn,false));
+      const cur=wi;
+      wi++;
+      if(BLACK_AFTER[l]){
+        const bn=`${BLACK_AFTER[l]}${o}`;
+        keysEl.appendChild(makeKey(bn,true,cur*42+30));
+      }
+    }
+  }
+}
+document.addEventListener('keydown',async e=>{
+  const k=e.key.toLowerCase();
+  if(KEYMAP[k]){ e.preventDefault(); await play(KEYMAP[k]); }
+  if(k==='z') setShift(-1);
+  if(k==='x') setShift(0);
+  if(k==='c') setShift(1);
+  if(k==='1') setManual('lower');
+  if(k==='2') setManual('upper');
+});
+build();
+refreshStatus();
+</script></body></html>","message":"Add minimal V4 ui","branch":"main"}}
