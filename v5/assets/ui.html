@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Harpsichord V5</title>
+<style>
+body{margin:0;background:#1b110c;color:#f6efe6;font-family:system-ui}.wrap{padding:14px;max-width:1000px;margin:auto}.title{text-align:center;font-size:1.4rem;font-weight:700}.sub,.legend{text-align:center;color:#d8c1a1;margin:8px 0}.panel{background:#342015;border:1px solid #6d4727;border-radius:12px;padding:12px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}.lab{display:block;font-size:.8rem;color:#d8c1a1;margin-bottom:4px}button,select{width:100%;padding:9px;border-radius:9px;border:1px solid #6e4a27;background:#3b2417;color:#f6efe6}.status{margin-top:10px;text-align:center;color:#d8c1a1}.keyboard{margin-top:12px;padding:14px;text-align:center;border-radius:14px;background:linear-gradient(#6a3f21,#321d12);border-top:6px solid #b88a3b;border-bottom:6px solid #b88a3b}.code{font-family:ui-monospace,monospace;background:#24160f;padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="title">Virtual Harpsichord V5</div>
+<div class="sub">Sample-based scaffold ready for mapped harpsichord audio files</div>
+<div class="panel">
+  <div class="grid">
+    <div><span class="lab">Audio</span><button id="audioBtn">Enable Audio</button></div>
+    <div><span class="lab">Instrument set</span><select id="instrument"><option>French (placeholder)</option><option>Italian (placeholder)</option></select></div>
+    <div><span class="lab">Registration</span><select id="registration"><option>Single 8'</option><option>Double 8'</option><option>8' + 4'</option></select></div>
+    <div><span class="lab">Sample map</span><select id="sampleMap"><option>Base map placeholder</option></select></div>
+  </div>
+  <div class="status" id="status">No samples loaded yet. Add audio files under <span class="code">v5/assets/sounds/</span>.</div>
+</div>
+<div class="keyboard">
+  <div>This V5 scaffold is ready.</div>
+  <div class="legend">Next step: add mapped note samples and sample-loading logic.</div>
+</div>
+</div>
+<script>
+let ctx=null;document.getElementById('audioBtn').onclick=async()=>{if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state!=='running')await ctx.resume();document.getElementById('audioBtn').textContent='Audio Enabled';};
+</script>
+</body>
+</html>
