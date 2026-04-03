@@ -1,5 +1,450 @@
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8" /><title>Virtual Harpsichord V5.2.1 Loader</title></head>
-<body><script src="./index.js"></script></body>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Harpsichord V5.2.1</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#1b110c;color:#f6efe6;font-family:system-ui}
+.wrap{padding:12px;max-width:1100px;margin:auto}
+.title{text-align:center;font-size:1.45rem;font-weight:700}
+.sub,.status,.legend{text-align:center;color:#d8c1a1;margin:6px 0}
+.panel{background:#342015;border:1px solid #6d4727;border-radius:12px;padding:10px;margin:10px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lab{font-size:.78rem;color:#d8c1a1;margin-bottom:4px;display:block}
+button,select{width:100%;padding:9px;border-radius:9px;border:1px solid #6e4a27;background:#3b2417;color:#f6efe6;font-size:.9rem;cursor:pointer}
+button:active{filter:brightness(1.2)}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.top .title{flex:1}
+.case{overflow:hidden;padding:12px;background:linear-gradient(#6a3f21,#321d12);border-top:6px solid #b88a3b;border-bottom:6px solid #b88a3b;border-radius:18px}
+.shell{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.keys{position:relative;display:flex;width:max-content;user-select:none;touch-action:pan-x}
+.wk{position:relative;width:42px;height:170px;background:linear-gradient(#fffaf2,#e8dcc9);border:1px solid #a68a68;border-bottom:9px solid #b59461;border-radius:0 0 9px 9px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;color:#51361d;font-size:.67rem}
+.wk.down{background:linear-gradient(#f5deb4,#dfc18d);transform:translateY(2px)}
+.bk{position:absolute;width:24px;height:98px;background:linear-gradient(#4f4035,#1f1714);border:1px solid #130d0b;border-radius:0 0 8px 8px;z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;color:#f0e4d3;font-size:.58rem}
+.bk.down{background:linear-gradient(#8b6a43,#3a281d);transform:translateY(2px)}
+.warn{color:#ffce8a}
+.ok{color:#a7e0a1}
+.narrow .wk,.narrow .bk{color:transparent}
+#rotateWrap{transition:transform .25s ease;transform-origin:center center}
+#rotateBtn{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="title">Virtual Harpsichord V5.2.1</div>
+    <button id="fsBtn">⛶ Fullscreen</button>
+  </div>
+
+  <div class="sub">V5.2 cleanup plus restored demos and fullscreen rotation</div>
+
+  <div class="panel">
+    <div class="grid">
+      <div>
+        <span class="lab">Audio</span>
+        <button id="audioBtn">Enable Audio</button>
+      </div>
+      <div>
+        <span class="lab">Source</span>
+        <select id="source">
+          <option value="cdn">CDN soundfont</option>
+          <option value="local">Local samples</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Local set</span>
+        <select id="localSet">
+          <option value="french">French</option>
+          <option value="italian">Italian</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Registration</span>
+        <select id="reg">
+          <option value="s8">Single 8'</option>
+          <option value="d8">Double 8'</option>
+          <option value="e4">8' + 4'</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Octave shift</span>
+        <div class="row2">
+          <button id="octDown">-1</button>
+          <button id="octUp">+1</button>
+        </div>
+      </div>
+      <div>
+        <span class="lab">Demo song</span>
+        <select id="demoSel">
+          <option value="">— pick a demo —</option>
+          <option value="addams">Addams Family</option>
+          <option value="bach">Bach-style Prelude</option>
+          <option value="arpeggio">C Major Arpeggio</option>
+        </select>
+      </div>
+      <div>
+        <span class="lab">Playback</span>
+        <div class="row2">
+          <button id="demoPlay">▶ Play</button>
+          <button id="demoStop">■ Stop</button>
+        </div>
+      </div>
+      <div>
+        <span class="lab">Utility</span>
+        <div class="row2">
+          <button id="labelsBtn">Labels</button>
+          <button id="rotateBtn">Rotate</button>
+        </div>
+      </div>
+    </div>
+    <div class="status" id="status">Loading configuration…</div>
+  </div>
+
+  <div class="case">
+    <div id="rotateWrap">
+      <div class="shell">
+        <div id="keys" class="keys"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">Rotate appears in fullscreen. Demos are restored on top of the cleaner V5.2 base.</div>
+</div>
+
+<script>
+const SHARP_TO_FLAT = {'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb'};
+const SEMI = {C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+const WHITE = ['C','D','E','F','G','A','B'];
+const BLACK_AFTER = {C:'C#',D:'D#',F:'F#',G:'G#',A:'A#'};
+const MIDI_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+let ctx = null;
+let config = null;
+let sfData = null;
+let shift = 0;
+let rotated = false;
+let buffers = new Map();
+let demoTimer = null;
+
+const statusEl = document.getElementById('status');
+const sourceEl = document.getElementById('source');
+const localSetEl = document.getElementById('localSet');
+const regEl = document.getElementById('reg');
+const demoSelEl = document.getElementById('demoSel');
+const keysEl = document.getElementById('keys');
+const rotateWrap = document.getElementById('rotateWrap');
+
+async function ensureAudio() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state !== 'running') await ctx.resume();
+  document.getElementById('audioBtn').textContent = 'Audio ✓';
+}
+document.getElementById('audioBtn').onclick = ensureAudio;
+
+function noteToMidi(note) {
+  const m = note.match(/^([A-G]#?)(\d)$/);
+  return 12 * (Number(m[2]) + 1 + shift) + SEMI[m[1]];
+}
+
+function midiToNoteName(m) {
+  if (m < 0 || m > 127) return null;
+  return MIDI_NAMES[m % 12] + (Math.floor(m / 12) - 1);
+}
+
+function toSfKey(note) {
+  const m = note.match(/^([A-G]#?)(\d)$/);
+  return (SHARP_TO_FLAT[m[1]] || m[1]) + m[2];
+}
+
+function sfKeyToMidi(k) {
+  const flats = {C:0,Db:1,D:2,Eb:3,E:4,F:5,Gb:6,G:7,Ab:8,A:9,Bb:10,B:11};
+  const m = k.match(/^([A-G][b]?)(\d)$/);
+  return 12 * (Number(m[2]) + 1) + (flats[m[1]] ?? 0);
+}
+
+async function loadConfig() {
+  const r = await fetch('./sample-map.json');
+  config = await r.json();
+  sourceEl.value = config.defaultUi.audioSource;
+  regEl.value = config.defaultUi.registration;
+  shift = config.defaultUi.octaveShift;
+  renderStatus();
+}
+
+function loadSoundfont() {
+  return new Promise((resolve, reject) => {
+    if (window.MIDI && window.MIDI.Soundfont && window.MIDI.Soundfont.harpsichord) {
+      sfData = window.MIDI.Soundfont.harpsichord;
+      return resolve();
+    }
+    const s = document.createElement('script');
+    s.src = config.cdnSoundfont.url;
+    s.onload = () => {
+      if (window.MIDI && window.MIDI.Soundfont && window.MIDI.Soundfont.harpsichord) {
+        sfData = window.MIDI.Soundfont.harpsichord;
+        resolve();
+      } else {
+        reject(new Error('Soundfont global missing'));
+      }
+    };
+    s.onerror = () => reject(new Error('Network error loading CDN soundfont'));
+    document.head.appendChild(s);
+  });
+}
+
+async function getSfBuffer(sfKey) {
+  if (buffers.has(sfKey)) return buffers.get(sfKey);
+  const dataUri = sfData[sfKey];
+  if (!dataUri) return null;
+  const b64 = dataUri.split(',')[1];
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
+  buffers.set(sfKey, decoded);
+  return decoded;
+}
+
+function nearestSfKey(targetMidi) {
+  let best = null, dist = 999;
+  for (const k of Object.keys(sfData)) {
+    const d = Math.abs(sfKeyToMidi(k) - targetMidi);
+    if (d < dist) {
+      dist = d;
+      best = k;
+    }
+  }
+  return best;
+}
+
+async function playBuffer(buf, rate = 1, gain = .88, when = 0) {
+  const src = ctx.createBufferSource();
+  const g = ctx.createGain();
+  src.buffer = buf;
+  src.playbackRate.value = rate;
+  g.gain.value = gain;
+  src.connect(g);
+  g.connect(ctx.destination);
+  src.start(ctx.currentTime + when);
+}
+
+async function playNote(note) {
+  await ensureAudio();
+
+  if (sourceEl.value === 'cdn') {
+    if (!sfData) {
+      statusEl.innerHTML = '<span class="warn">Soundfont not ready</span>';
+      return;
+    }
+
+    const targetMidi = noteToMidi(note);
+    const shifted = midiToNoteName(targetMidi);
+    let sfKey = shifted ? toSfKey(shifted) : null;
+    let rate = 1;
+
+    if (!sfKey || !sfData[sfKey]) {
+      sfKey = nearestSfKey(targetMidi);
+      if (!sfKey) {
+        statusEl.innerHTML = '<span class="warn">No sample found</span>';
+        return;
+      }
+      rate = Math.pow(2, (targetMidi - sfKeyToMidi(sfKey)) / 12);
+    }
+
+    const buf = await getSfBuffer(sfKey);
+    if (!buf) {
+      statusEl.innerHTML = '<span class="warn">Missing ' + sfKey + '</span>';
+      return;
+    }
+
+    await playBuffer(buf, rate, .88, 0);
+    if (regEl.value === 'd8') await playBuffer(buf, rate * 1.003, .52, .012);
+    if (regEl.value === 'e4') await playBuffer(buf, rate * 2, .26, .006);
+    statusEl.innerHTML = '<span class="ok">♪ ' + note + '</span>';
+  } else {
+    const set = config.localSampleSets[localSetEl.value];
+    statusEl.innerHTML = '<span class="warn">Local mode ready at ' + set.baseUrl + ' but no mapped files yet</span>';
+  }
+}
+
+async function preloadNotes() {
+  if (sourceEl.value !== 'cdn' || !config || !sfData) return;
+  await ensureAudio();
+  for (const n of config.defaultUi.preloadNotes) {
+    const shifted = midiToNoteName(noteToMidi(n));
+    const key = shifted ? toSfKey(shifted) : null;
+    if (key && sfData[key]) {
+      try { await getSfBuffer(key); } catch (e) {}
+    }
+  }
+  statusEl.innerHTML = '<span class="ok">Ready • preloaded ' + config.defaultUi.preloadNotes.join(', ') + '</span>';
+}
+
+function makeKey(note, isBlack, left = 0) {
+  const el = document.createElement('div');
+  el.className = isBlack ? 'bk' : 'wk';
+  el.textContent = note;
+  el.dataset.note = note;
+  if (isBlack) el.style.left = `${left}px`;
+
+  const down = async e => {
+    e.preventDefault();
+    el.classList.add('down');
+    try { await playNote(note); } catch (err) { console.error(err); }
+  };
+  const up = () => el.classList.remove('down');
+
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+
+  return el;
+}
+
+function build() {
+  let wi = 0;
+  for (let o = 3; o <= 6; o++) {
+    for (const l of WHITE) {
+      const wn = `${l}${o}`;
+      keysEl.appendChild(makeKey(wn, false));
+      const cur = wi;
+      wi++;
+      if (BLACK_AFTER[l]) {
+        keysEl.appendChild(makeKey(`${BLACK_AFTER[l]}${o}`, true, cur * 42 + 30));
+      }
+    }
+  }
+}
+
+function renderStatus() {
+  statusEl.textContent = 'Source: ' + sourceEl.value + ' | Reg: ' + regEl.value + ' | octave ' + (shift > 0 ? '+' : '') + shift;
+}
+
+document.getElementById('octDown').onclick = () => { shift--; renderStatus(); };
+document.getElementById('octUp').onclick = () => { shift++; renderStatus(); };
+[sourceEl, localSetEl, regEl].forEach(el => el.onchange = renderStatus);
+
+document.getElementById('labelsBtn').onclick = () => {
+  keysEl.classList.toggle('narrow');
+};
+
+const DEMOS = {
+  addams: {
+    bpm: 126,
+    seq: [
+      {n:'E4',d:1},{n:'G4',d:.5},{n:'A4',d:.5},{n:'E4',d:1},{n:null,d:.3},
+      {n:'E4',d:1},{n:'G4',d:.5},{n:'A4',d:.5},{n:'C5',d:1},{n:null,d:.3},
+      {n:'B4',d:.5},{n:'A4',d:.5},{n:'G4',d:.5},{n:'E4',d:.5},{n:'D4',d:1.5},
+      {n:null,d:.5},{n:'E4',d:1},{n:'G4',d:.5},{n:'A4',d:.5},{n:'E4',d:2.5}
+    ]
+  },
+  bach: {
+    bpm: 116,
+    seq: [
+      {n:'C4',d:.5},{n:'E4',d:.5},{n:'G4',d:.5},{n:'C5',d:.5},
+      {n:'E5',d:.5},{n:'C5',d:.5},{n:'G4',d:.5},{n:'E4',d:.5},
+      {n:'C4',d:.5},{n:'F4',d:.5},{n:'A4',d:.5},{n:'C5',d:.5},
+      {n:'F5',d:.5},{n:'C5',d:.5},{n:'A4',d:.5},{n:'F4',d:.5}
+    ]
+  },
+  arpeggio: {
+    bpm: 100,
+    seq: [
+      {n:'C4',d:1},{n:'E4',d:1},{n:'G4',d:1},{n:'C5',d:1},
+      {n:'B4',d:1},{n:'G4',d:1},{n:'E4',d:1},{n:'C4',d:2}
+    ]
+  }
+};
+
+function stopDemo() {
+  if (demoTimer) {
+    clearTimeout(demoTimer);
+    demoTimer = null;
+  }
+}
+
+function flashKey(note) {
+  keysEl.querySelectorAll('[data-note="' + note + '"]').forEach(el => {
+    el.classList.add('down');
+    setTimeout(() => el.classList.remove('down'), 180);
+  });
+}
+
+function playDemo(id) {
+  stopDemo();
+  const demo = DEMOS[id];
+  if (!demo) return;
+  const beatMs = 60000 / demo.bpm;
+  let i = 0;
+  function step() {
+    if (i >= demo.seq.length) {
+      demoTimer = null;
+      return;
+    }
+    const {n, d} = demo.seq[i++];
+    if (n) {
+      playNote(n).catch(() => {});
+      flashKey(n);
+    }
+    demoTimer = setTimeout(step, d * beatMs);
+  }
+  step();
+}
+
+document.getElementById('demoPlay').onclick = () => {
+  const id = demoSelEl.value;
+  if (id) playDemo(id);
+};
+document.getElementById('demoStop').onclick = stopDemo;
+
+function onFsChange() {
+  const fs = !!document.fullscreenElement;
+  document.getElementById('fsBtn').textContent = fs ? '✕ Exit' : '⛶ Fullscreen';
+  document.getElementById('rotateBtn').style.display = fs ? 'block' : 'none';
+  if (!fs) {
+    rotated = false;
+    rotateWrap.style.transform = '';
+  }
+}
+document.addEventListener('fullscreenchange', onFsChange);
+
+document.getElementById('fsBtn').onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+};
+
+document.getElementById('rotateBtn').onclick = () => {
+  rotated = !rotated;
+  rotateWrap.style.transform = rotated ? 'rotate(90deg) scale(.78)' : '';
+};
+
+document.addEventListener('keydown', async e => {
+  const map = {a:'C4',w:'C#4',s:'D4',e:'D#4',d:'E4',f:'F4',t:'F#4',g:'G4',y:'G#4',h:'A4',u:'A#4',j:'B4',k:'C5',o:'C#5',l:'D5',p:'D#5',';':'E5'};
+  const k = e.key.toLowerCase();
+  if (map[k]) {
+    e.preventDefault();
+    await playNote(map[k]);
+  }
+  if (k === 'z') shift--;
+  if (k === 'x') shift = 0;
+  if (k === 'c') shift++;
+  renderStatus();
+});
+
+build();
+loadConfig()
+  .then(loadSoundfont)
+  .then(preloadNotes)
+  .catch(err => {
+    statusEl.innerHTML = '<span class="warn">Init failed: ' + err.message + '</span>';
+  });
+</script>
+</body>
 </html>
