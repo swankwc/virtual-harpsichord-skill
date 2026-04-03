@@ -1,2 +1,356 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Virtual Harpsichord V5.1</title><style>body{margin:0;background:#1b110c;color:#f6efe6;font-family:system-ui}.wrap{padding:12px;max-width:1100px;margin:auto}.title{text-align:center;font-size:1.45rem;font-weight:700}.sub,.status,.legend{text-align:center;color:#d8c1a1;margin:6px 0}.panel{background:#342015;border:1px solid #6d4727;border-radius:12px;padding:10px;margin:10px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}.lab{font-size:.78rem;color:#d8c1a1;margin-bottom:4px;display:block}button,select{width:100%;padding:9px;border-radius:9px;border:1px solid #6e4a27;background:#3b2417;color:#f6efe6}.active{outline:2px solid #b88a3b}.case{overflow:hidden;padding:12px;background:linear-gradient(#6a3f21,#321d12);border-top:6px solid #b88a3b;border-bottom:6px solid #b88a3b;border-radius:18px}.shell{overflow-x:auto}.keys{position:relative;display:flex;width:max-content;user-select:none;touch-action:pan-x}.wk{position:relative;width:42px;height:170px;background:linear-gradient(#fffaf2,#e8dcc9);border:1px solid #a68a68;border-bottom:9px solid #b59461;border-radius:0 0 9px 9px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;color:#51361d;font-size:.67rem}.wk.down{background:linear-gradient(#f5deb4,#dfc18d);transform:translateY(2px)}.bk{position:absolute;width:24px;height:98px;background:linear-gradient(#4f4035,#1f1714);border:1px solid #130d0b;border-radius:0 0 8px 8px;z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;color:#f0e4d3;font-size:.58rem}.bk.down{background:linear-gradient(#8b6a43,#3a281d);transform:translateY(2px)}.warn{color:#ffce8a}.ok{color:#a7e0a1}</style></head><body><div class="wrap"><div class="title">Virtual Harpsichord V5.1</div><div class="sub">Sample-loading harpsichord with mapped fallback logic</div><div class="panel"><div class="grid"><div><span class="lab">Audio</span><button id="audioBtn">Enable Audio</button></div><div><span class="lab">Instrument</span><select id="instrument"></select></div><div><span class="lab">Registration</span><select id="reg"><option value="s8">Single 8'</option><option value="d8">Double 8'</option><option value="e4">8' + 4'</option></select></div><div><span class="lab">Sample mode</span><select id="mode"><option value="strict">Strict samples</option><option value="fallback">Pitch-shift fallback</option></select></div><div><span class="lab">Octave</span><div class="row2"><button id="octDown">-1</button><button id="octUp">+1</button></div></div></div><div class="status" id="status">Loading sample map…</div></div><div class="case"><div class="shell"><div id="keys" class="keys"></div></div></div><div class="legend">This version can use real files from <code>v5_1/assets/sounds/</code>. Without them, it will tell you which mapped file is missing.</div></div><script>const WHITE=['C','D','E','F','G','A','B'],BLACK_AFTER={C:'C#',D:'D#',F:'F#',G:'G#',A:'A#'},SEMI={C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};let ctx=null,shift=0,mapData=null,buffers=new Map();const statusEl=document.getElementById('status'),instrumentEl=document.getElementById('instrument'),regEl=document.getElementById('reg'),modeEl=document.getElementById('mode'),keysEl=document.getElementById('keys');async function ensureAudio(){if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state!=='running')await ctx.resume();document.getElementById('audioBtn').textContent='Audio Enabled'}document.getElementById('audioBtn').onclick=ensureAudio;document.getElementById('octDown').onclick=()=>{shift--;renderStatus()};document.getElementById('octUp').onclick=()=>{shift++;renderStatus()};function parseNote(note){const m=note.match(/^([A-G]#?)(\d)$/);return{name:m[1],oct:Number(m[2])}}function midi(note){const p=parseNote(note);return 12*((p.oct+shift)+1)+SEMI[p.name]}function nearestMapped(set,note){const targets=Object.keys(set.notes);let best=targets[0],bestDist=Infinity;for(const t of targets){const d=Math.abs(midi(t)-midi(note));if(d<bestDist){best=t;bestDist=d}}return best}async function fetchBuffer(url){if(buffers.has(url))return buffers.get(url);const r=await fetch(url);if(!r.ok)throw new Error('Missing sample '+url);const b=await r.arrayBuffer();const decoded=await ctx.decodeAudioData(b);buffers.set(url,decoded);return decoded}async function playBuffer(buffer,playbackRate=1,gainValue=.95,when=0){const src=ctx.createBufferSource(),g=ctx.createGain();src.buffer=buffer;src.playbackRate.value=playbackRate;g.gain.value=gainValue;src.connect(g);g.connect(ctx.destination);src.start(ctx.currentTime+when)}async function playNote(note){await ensureAudio();const key=instrumentEl.value;const set=mapData.instrumentSets[key];let mapped=note,playbackRate=1;if(!set.notes[mapped]){if(modeEl.value==='strict'){statusEl.innerHTML='<span class="warn">No direct sample for '+note+' in '+set.displayName+'</span>';return}else{mapped=nearestMapped(set,note);playbackRate=Math.pow(2,(midi(note)-midi(mapped))/12)}}const url=set.baseUrl+set.notes[mapped];try{const buffer=await fetchBuffer(url);await playBuffer(buffer,playbackRate,.95,0);if(regEl.value==='d8')await playBuffer(buffer,playbackRate*1.003,.65,.01);if(regEl.value==='e4')await playBuffer(buffer,playbackRate*2,.38,.005);statusEl.innerHTML='<span class="ok">Played '+note+' using '+mapped+' → '+url+'</span>'}catch(err){statusEl.innerHTML='<span class="warn">'+err.message+'</span>'}}function makeKey(note,isBlack,left=0){const el=document.createElement('div');el.className=isBlack?'bk':'wk';el.textContent=note;if(isBlack)el.style.left=`${left}px`;const down=async e=>{e.preventDefault();el.classList.add('down');try{await playNote(note)}catch(err){console.error(err)}};const up=()=>el.classList.remove('down');el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('pointerleave',up);return el}function build(){let wi=0;for(let o=3;o<=6;o++){for(const l of WHITE){const wn=`${l}${o}`;keysEl.appendChild(makeKey(wn,false));const cur=wi;wi++;if(BLACK_AFTER[l])keysEl.appendChild(makeKey(`${BLACK_AFTER[l]}${o}`,true,cur*42+30))}}}function renderStatus(){statusEl.textContent='Instrument: '+instrumentEl.value+' | '+regEl.value+' | octave '+(shift>0?'+':'')+shift+' | '+modeEl.value}async function init(){const r=await fetch('./sample-map.json');mapData=await r.json();for(const [id,set] of Object.entries(mapData.instrumentSets)){const opt=document.createElement('option');opt.value=id;opt.textContent=set.displayName;instrumentEl.appendChild(opt)}instrumentEl.onchange=renderStatus;regEl.onchange=renderStatus;modeEl.onchange=renderStatus;build();renderStatus()}init().catch(err=>{statusEl.innerHTML='<span class="warn">Failed to load sample map: '+err.message+'</span>'});</script></body></html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Harpsichord V5.1</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#1b110c;color:#f6efe6;font-family:system-ui}
+.wrap{padding:12px;max-width:1100px;margin:auto}
+.title{text-align:center;font-size:1.45rem;font-weight:700}
+.sub,.status,.legend{text-align:center;color:#d8c1a1;margin:6px 0}
+.panel{background:#342015;border:1px solid #6d4727;border-radius:12px;padding:10px;margin:10px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lab{font-size:.78rem;color:#d8c1a1;margin-bottom:4px;display:block}
+button,select{width:100%;padding:9px;border-radius:9px;border:1px solid #6e4a27;background:#3b2417;color:#f6efe6;font-size:.9rem;cursor:pointer}
+button:active{filter:brightness(1.3)}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.topbar .title{flex:1}
+#fsBtn{width:auto;padding:7px 14px;font-size:.85rem;white-space:nowrap;flex-shrink:0}
+.case{overflow:hidden;padding:12px;background:linear-gradient(#6a3f21,#321d12);border-top:6px solid #b88a3b;border-bottom:6px solid #b88a3b;border-radius:18px}
+.shell{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.keys{position:relative;display:flex;width:max-content;user-select:none;touch-action:pan-x}
+.wk{position:relative;width:42px;height:170px;background:linear-gradient(#fffaf2,#e8dcc9);border:1px solid #a68a68;border-bottom:9px solid #b59461;border-radius:0 0 9px 9px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;color:#51361d;font-size:.67rem}
+.wk.down{background:linear-gradient(#f5deb4,#dfc18d);transform:translateY(2px)}
+.bk{position:absolute;width:24px;height:98px;background:linear-gradient(#4f4035,#1f1714);border:1px solid #130d0b;border-radius:0 0 8px 8px;z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;color:#f0e4d3;font-size:.58rem}
+.bk.down{background:linear-gradient(#8b6a43,#3a281d);transform:translateY(2px)}
+.warn{color:#ffce8a}.ok{color:#a7e0a1}
+#rotateRow{display:none;margin-top:10px;text-align:center}
+#rotateRow button{width:auto;padding:8px 22px;display:inline-block}
+.rot-wrap{transition:transform .3s;transform-origin:center center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="title">Virtual Harpsichord V5.1</div>
+    <button id="fsBtn">⛶ Fullscreen</button>
+  </div>
+  <div class="sub">Real harpsichord · FluidR3 GM soundfont · all 4 octaves</div>
+  <div class="panel">
+    <div class="grid">
+      <div><span class="lab">Audio</span><button id="audioBtn">Enable Audio</button></div>
+      <div><span class="lab">Registration</span>
+        <select id="reg">
+          <option value="s8">Single 8'</option>
+          <option value="d8">Double 8'</option>
+          <option value="e4">8' + 4'</option>
+        </select>
+      </div>
+      <div><span class="lab">Octave shift</span>
+        <div class="row2"><button id="octDown">-1</button><button id="octUp">+1</button></div>
+      </div>
+      <div><span class="lab">Demo song</span>
+        <select id="demoSel">
+          <option value="">— pick a demo —</option>
+          <option value="addams">🎵 Addams Family (Lurch)</option>
+          <option value="bach">🎵 Bach-style Prelude</option>
+          <option value="arpeggio">🎵 C Major Arpeggio</option>
+        </select>
+      </div>
+      <div><span class="lab">Playback</span>
+        <div class="row2"><button id="demoPlay">▶ Play</button><button id="demoStop">■ Stop</button></div>
+      </div>
+    </div>
+    <div class="status" id="status">Loading harpsichord soundfont…</div>
+  </div>
+  <div class="case">
+    <div class="rot-wrap" id="rotWrap">
+      <div class="shell"><div id="keys" class="keys"></div></div>
+    </div>
+    <div id="rotateRow"><button id="rotateBtn">↺ Rotate for two-hand play</button></div>
+  </div>
+  <div class="legend">FluidR3 GM harpsichord via gleitz/midi-js-soundfonts · rotate in fullscreen for two-hand play</div>
+</div>
+<script>
+// ── Note name helpers ──────────────────────────────────────────────────────
+// Internal notation uses sharps (C#, D#, F#, G#, A#)
+// gleitz soundfont uses flats (Db, Eb, Gb, Ab, Bb)
+const SHARP_TO_FLAT={'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb'};
+const SEMI={C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+const WHITE=['C','D','E','F','G','A','B'];
+const BLACK_AFTER={C:'C#',D:'D#',F:'F#',G:'G#',A:'A#'};
+
+// Convert our note (e.g. "C#4") to gleitz key (e.g. "Db4")
+function toSfKey(note){
+  const m=note.match(/^([A-G]#?)(\d)$/);
+  const name=SHARP_TO_FLAT[m[1]]||m[1];
+  return name+m[2];
+}
+// MIDI number for pitch-shift math
+function noteToMidi(note){
+  const m=note.match(/^([A-G]#?)(\d)$/);
+  return 12*(Number(m[2])+1)+SEMI[m[1]];
+}
+// Parse a gleitz key (e.g. "Bb4") to midi
+const FLAT_TO_SEMI={C:0,Db:1,D:2,Eb:3,E:4,F:5,Gb:6,G:7,Ab:8,A:9,Bb:10,B:11};
+function sfKeyToMidi(k){
+  const m=k.match(/^([A-G][b]?)(\d)$/);
+  if(!m) return -1;
+  return 12*(Number(m[2])+1)+(FLAT_TO_SEMI[m[1]]??-1);
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let ctx=null, shift=0, sfData=null;
+const buffers=new Map();
+let demoTimer=null, rotated=false;
+
+const statusEl=document.getElementById('status');
+const regEl=document.getElementById('reg');
+const keysEl=document.getElementById('keys');
+const demoSelEl=document.getElementById('demoSel');
+const rotWrap=document.getElementById('rotWrap');
+const rotateRow=document.getElementById('rotateRow');
+
+// ── Audio context ──────────────────────────────────────────────────────────
+async function ensureAudio(){
+  if(!ctx) ctx=new(window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state!=='running') await ctx.resume();
+  document.getElementById('audioBtn').textContent='Audio ✓';
+}
+document.getElementById('audioBtn').onclick=ensureAudio;
+
+// ── Soundfont loader ───────────────────────────────────────────────────────
+// gleitz sets: MIDI.Soundfont.harpsichord = { "A0": "data:audio/mp3;base64,…", … }
+function loadSoundfont(){
+  return new Promise((resolve,reject)=>{
+    if(window.MIDI&&window.MIDI.Soundfont&&window.MIDI.Soundfont.harpsichord){
+      sfData=window.MIDI.Soundfont.harpsichord;
+      return resolve();
+    }
+    const s=document.createElement('script');
+    s.src='https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/harpsichord-mp3.js';
+    s.onload=()=>{
+      if(window.MIDI&&window.MIDI.Soundfont&&window.MIDI.Soundfont.harpsichord){
+        sfData=window.MIDI.Soundfont.harpsichord;
+        resolve();
+      } else {
+        reject(new Error('MIDI.Soundfont.harpsichord not found after script load'));
+      }
+    };
+    s.onerror=()=>reject(new Error('Network error loading soundfont CDN'));
+    document.head.appendChild(s);
+  });
+}
+
+// ── Decode a base64 audio data-URI and cache the AudioBuffer ──────────────
+async function getBuffer(sfKey){
+  if(buffers.has(sfKey)) return buffers.get(sfKey);
+  const dataUri=sfData[sfKey];
+  if(!dataUri) return null;
+  const b64=dataUri.split(',')[1];
+  const bin=atob(b64);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const decoded=await ctx.decodeAudioData(bytes.buffer.slice(0));
+  buffers.set(sfKey,decoded);
+  return decoded;
+}
+
+// ── Find nearest available soundfont key by MIDI distance ─────────────────
+function nearestSfKey(targetMidi){
+  let best=null, bestDist=999;
+  for(const k of Object.keys(sfData)){
+    const d=Math.abs(sfKeyToMidi(k)-targetMidi);
+    if(d<bestDist){ bestDist=d; best=k; }
+  }
+  return best;
+}
+
+// ── Play a note ────────────────────────────────────────────────────────────
+async function playBuffer(buf, rate=1, gain=.88, when=0){
+  const src=ctx.createBufferSource(), g=ctx.createGain();
+  src.buffer=buf; src.playbackRate.value=rate;
+  g.gain.value=gain;
+  src.connect(g); g.connect(ctx.destination);
+  src.start(ctx.currentTime+when);
+}
+
+async function playNote(note){
+  await ensureAudio();
+  if(!sfData){ statusEl.innerHTML='<span class="warn">Soundfont not loaded yet</span>'; return; }
+  const shiftedMidi=noteToMidi(note)+shift*12;
+  // Build shifted note name for exact lookup
+  const shiftedNote=midiToNoteName(shiftedMidi);
+  const exactKey=shiftedNote?toSfKey(shiftedNote):null;
+  let sfKey=exactKey, rate=1;
+  if(!sfKey||!sfData[sfKey]){
+    sfKey=nearestSfKey(shiftedMidi);
+    if(!sfKey){ statusEl.innerHTML='<span class="warn">No sample found for '+note+'</span>'; return; }
+    rate=Math.pow(2,(shiftedMidi-sfKeyToMidi(sfKey))/12);
+  }
+  try{
+    const buf=await getBuffer(sfKey);
+    if(!buf){ statusEl.innerHTML='<span class="warn">Empty buffer for '+sfKey+'</span>'; return; }
+    await playBuffer(buf,rate,.88,0);
+    if(regEl.value==='d8') await playBuffer(buf,rate*1.003,.52,.012);
+    if(regEl.value==='e4') await playBuffer(buf,rate*2,.26,.006);
+    const label=rate!==1?note+' (via '+sfKey+')':note;
+    statusEl.innerHTML='<span class="ok">♪ '+label+'</span>';
+  }catch(err){
+    statusEl.innerHTML='<span class="warn">'+err.message+'</span>';
+  }
+}
+
+// Convert MIDI number back to sharp-notation note name (e.g. 61 → "C#4")
+const MIDI_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+function midiToNoteName(midi){
+  if(midi<0||midi>127) return null;
+  const pc=midi%12; const oct=Math.floor(midi/12)-1;
+  return MIDI_NAMES[pc]+oct;
+}
+
+// ── Demo sequences ─────────────────────────────────────────────────────────
+// Addams Family: the harpsichord vamp Lurch plays in the original TV show.
+// Two "snap" beats are represented as null rests.
+const DEMOS={
+  addams:{bpm:126, seq:[
+    {n:'E4',d:1},{n:'G4',d:.5},{n:'A4',d:.5},
+    {n:'E4',d:1},{n:null,d:.3},
+    {n:'E4',d:1},{n:'G4',d:.5},{n:'A4',d:.5},
+    {n:'C5',d:1},{n:null,d:.3},
+    {n:'B4',d:.5},{n:'A4',d:.5},{n:'G4',d:.5},{n:'E4',d:.5},
+    {n:'D4',d:1.5},{n:null,d:.5},
+    {n:'E4',d:1},{n:'G4',d:.5},{n:'A4',d:.5},
+    {n:'E4',d:2.5}
+  ]},
+  bach:{bpm:116, seq:[
+    {n:'C4',d:.5},{n:'E4',d:.5},{n:'G4',d:.5},{n:'C5',d:.5},
+    {n:'E5',d:.5},{n:'C5',d:.5},{n:'G4',d:.5},{n:'E4',d:.5},
+    {n:'C4',d:.5},{n:'F4',d:.5},{n:'A4',d:.5},{n:'C5',d:.5},
+    {n:'F5',d:.5},{n:'C5',d:.5},{n:'A4',d:.5},{n:'F4',d:.5},
+    {n:'G3',d:.5},{n:'D4',d:.5},{n:'G4',d:.5},{n:'B4',d:.5},
+    {n:'D5',d:.5},{n:'B4',d:.5},{n:'G4',d:.5},{n:'D4',d:.5},
+    {n:'G3',d:.5},{n:'C4',d:.5},{n:'E4',d:.5},{n:'G4',d:.5},
+    {n:'C5',d:.5},{n:'G4',d:.5},{n:'E4',d:.5},{n:'C4',d:1}
+  ]},
+  arpeggio:{bpm:100, seq:[
+    {n:'C4',d:1},{n:'E4',d:1},{n:'G4',d:1},{n:'C5',d:1},
+    {n:'B4',d:1},{n:'G4',d:1},{n:'E4',d:1},{n:'C4',d:2}
+  ]}
+};
+
+function stopDemo(){ if(demoTimer){clearTimeout(demoTimer);demoTimer=null;} }
+
+function flashKey(note){
+  keysEl.querySelectorAll('[data-note="'+note+'"]').forEach(el=>{
+    el.classList.add('down');
+    setTimeout(()=>el.classList.remove('down'),180);
+  });
+}
+
+function playDemo(id){
+  stopDemo();
+  const demo=DEMOS[id]; if(!demo) return;
+  const beatMs=60000/demo.bpm;
+  let i=0;
+  function step(){
+    if(i>=demo.seq.length){ demoTimer=null; return; }
+    const {n,d}=demo.seq[i++];
+    if(n){ playNote(n).catch(()=>{}); flashKey(n); }
+    demoTimer=setTimeout(step, d*beatMs);
+  }
+  step();
+}
+
+document.getElementById('demoPlay').onclick=()=>{ const id=demoSelEl.value; if(id) playDemo(id); };
+document.getElementById('demoStop').onclick=stopDemo;
+
+// ── Octave controls ────────────────────────────────────────────────────────
+document.getElementById('octDown').onclick=()=>{ shift--; updateStatus(); };
+document.getElementById('octUp').onclick=()=>{ shift++; updateStatus(); };
+regEl.onchange=updateStatus;
+function updateStatus(){
+  const loaded=sfData?Object.keys(sfData).length+' samples':'loading…';
+  statusEl.textContent='Reg: '+regEl.value+' | octave '+(shift>0?'+':'')+shift+' | '+loaded;
+}
+
+// ── Keyboard builder ───────────────────────────────────────────────────────
+function makeKey(note,isBlack,left=0){
+  const el=document.createElement('div');
+  el.className=isBlack?'bk':'wk';
+  el.textContent=note;
+  el.dataset.note=note;
+  if(isBlack) el.style.left=`${left}px`;
+  const down=async e=>{ e.preventDefault(); el.classList.add('down'); try{await playNote(note);}catch(err){console.error(err);} };
+  const up=()=>el.classList.remove('down');
+  el.addEventListener('pointerdown',down);
+  el.addEventListener('pointerup',up);
+  el.addEventListener('pointercancel',up);
+  el.addEventListener('pointerleave',up);
+  return el;
+}
+
+function build(){
+  let wi=0;
+  for(let o=3;o<=6;o++){
+    for(const l of WHITE){
+      const wn=`${l}${o}`;
+      keysEl.appendChild(makeKey(wn,false));
+      const cur=wi; wi++;
+      if(BLACK_AFTER[l]) keysEl.appendChild(makeKey(`${BLACK_AFTER[l]}${o}`,true,cur*42+30));
+    }
+  }
+}
+
+// ── Fullscreen + Rotation ──────────────────────────────────────────────────
+const fsBtn=document.getElementById('fsBtn');
+const rotateBtn=document.getElementById('rotateBtn');
+
+function applyRotation(){
+  if(rotated){
+    // Rotate 90° so the keyboard runs top-to-bottom for two-hand portrait play.
+    // Scale so the rotated keyboard width fits the viewport height.
+    const vw=window.innerWidth||screen.width;
+    const vh=window.innerHeight||screen.height;
+    // The keyboard is ~1800px wide; scale so it fits in the viewport width when rotated.
+    const keyboardW=keysEl.scrollWidth||1800;
+    const scale=Math.min(vh/keyboardW,1);
+    rotWrap.style.transform=`rotate(90deg) scaleX(${scale.toFixed(3)})`;
+    rotWrap.style.transformOrigin='center center';
+    rotWrap.style.marginTop=(vh*0.3)+'px';
+  } else {
+    rotWrap.style.transform='';
+    rotWrap.style.transformOrigin='';
+    rotWrap.style.marginTop='';
+  }
+  rotateBtn.textContent=rotated?'↺ Un-rotate keyboard':'↺ Rotate for two-hand play';
+}
+
+rotateBtn.onclick=()=>{ rotated=!rotated; applyRotation(); };
+
+function onFsChange(){
+  const inFs=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  fsBtn.textContent=inFs?'✕ Exit Fullscreen':'⛶ Fullscreen';
+  rotateRow.style.display=inFs?'block':'none';
+  if(!inFs){ rotated=false; applyRotation(); }
+}
+document.addEventListener('fullscreenchange',onFsChange);
+document.addEventListener('webkitfullscreenchange',onFsChange);
+
+fsBtn.onclick=()=>{
+  const el=document.documentElement;
+  if(!document.fullscreenElement&&!document.webkitFullscreenElement){
+    (el.requestFullscreen||el.webkitRequestFullscreen).call(el).catch(()=>{});
+  } else {
+    (document.exitFullscreen||document.webkitExitFullscreen).call(document).catch(()=>{});
+  }
+};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+build();
+loadSoundfont()
+  .then(()=>{ updateStatus(); })
+  .catch(err=>{
+    statusEl.innerHTML='<span class="warn">Soundfont load failed: '+err.message+'</span>';
+  });
+</script></body></html>

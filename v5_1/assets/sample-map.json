@@ -1,41 +1,22 @@
 {
-  "instrumentSets": {
+  "_note": "v5.1 now loads the FluidR3 GM harpsichord soundfont directly from gleitz/midi-js-soundfonts CDN. This file is retained for reference and future local-sample support.",
+  "cdnSoundfont": {
+    "source": "gleitz/midi-js-soundfonts",
+    "url": "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/harpsichord-mp3.js",
+    "global": "MIDI.Soundfont.harpsichord",
+    "format": "base64 mp3 data-URIs, chromatic C0–C8, flat notation (Bb, Db, Eb, Gb, Ab)",
+    "license": "CC"
+  },
+  "localSampleSlots": {
     "french": {
-      "displayName": "French (sample-ready)",
+      "displayName": "French (local — add files to sounds/french/)",
       "baseUrl": "./sounds/french/",
-      "notes": {
-        "C3": "C3.mp3",
-        "D#3": "Ds3.mp3",
-        "F#3": "Fs3.mp3",
-        "A3": "A3.mp3",
-        "C4": "C4.mp3",
-        "D#4": "Ds4.mp3",
-        "F#4": "Fs4.mp3",
-        "A4": "A4.mp3",
-        "C5": "C5.mp3",
-        "D#5": "Ds5.mp3",
-        "F#5": "Fs5.mp3",
-        "A5": "A5.mp3"
-      }
+      "notes": {}
     },
     "italian": {
-      "displayName": "Italian (sample-ready)",
+      "displayName": "Italian (local — add files to sounds/italian/)",
       "baseUrl": "./sounds/italian/",
-      "notes": {
-        "C3": "C3.mp3",
-        "D#3": "Ds3.mp3",
-        "F#3": "Fs3.mp3",
-        "A3": "A3.mp3",
-        "C4": "C4.mp3",
-        "D#4": "Ds4.mp3",
-        "F#4": "Fs4.mp3",
-        "A4": "A4.mp3",
-        "C5": "C5.mp3",
-        "D#5": "Ds5.mp3",
-        "F#5": "Fs5.mp3",
-        "A5": "A5.mp3"
-      }
+      "notes": {}
     }
-  },
-  "fallbackOrder": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+  }
 }
